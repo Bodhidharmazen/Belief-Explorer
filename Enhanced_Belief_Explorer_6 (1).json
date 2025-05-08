@@ -1,0 +1,392 @@
+{
+  "name": "Enhanced Belief Explorer 6",
+  "nodes": [
+    {
+      "parameters": {
+        "functionCode": "// Capture the user input from the incoming JSON.\n// Expects data at $json.body.statement and $json.body.history\n\n// Access the body object directly from the input item's JSON payload\nconst body = $json.body; \n\n// Extract statement and history, providing defaults\nconst userStatement = body?.statement || \"(missing statement)\";\nconst userHistory = Array.isArray(body?.history) ? body.history : [];\n\n// Return the structured data for the next node\nreturn [{\n  json: {\n    userStatement: userStatement,\n    userHistory: userHistory\n  }\n}];"
+      },
+      "name": "Capture User Input",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -120,
+        340
+      ],
+      "id": "c36d70b3-bab2-4081-b288-5effd0980ed8"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Streamlined claim extraction and analysis\nconst userStatement = $input.item.json.userStatement;\nif (!userStatement) {\n    return [{ json: { claimAnalysis: [], claimForPerspectiveGen: null, _initialAnalysis: [] } }];\n}\n\n// Extract the main claim (use whole statement as fallback)\nconst sentences = userStatement.match(/[^.!?]+[.!?]+/g) || [userStatement];\nconst claims = sentences.filter(s => s.trim().length > 10);\nconst primaryClaim = claims.length > 0 ? claims[0].trim() : userStatement.trim();\n\n// Existing assumption detection function\nfunction identifyAssumptions(claim) {\n  const assumptionIndicators = [\n    'all', 'everyone', 'always', 'never', 'nobody', 'certainly',\n    'definitely', 'obviously', 'clearly', 'absolutely', 'undoubtedly',\n    'every', 'no one', 'must', 'should', 'will', \"won't\", 'proven'\n  ];\n  const lowerClaim = claim.toLowerCase();\n  const containsIndicators = assumptionIndicators.some(indicator =>\n    lowerClaim.includes(` ${indicator} `) || lowerClaim.startsWith(`${indicator} `) || lowerClaim.endsWith(` ${indicator}`)\n  );\n  return containsIndicators ? 'Contains absolute terms or generalizations' : 'No obvious absolutes identified';\n}\n\n// Existing score calculation function\nfunction calculateScores(claim) {\n  let components = {\n    empiricalVerifiability: 0.5, logicalConsistency: 0.5, falsifiability: 0.5,\n    modelDiversity: 0.5, contextualSensitivity: 0.5, reflectiveIndex: 0.5\n  };\n  const lowerClaim = claim.toLowerCase();\n  \n  if (/\\d+|%|percent|meter|kilogram|second|study|data|statistic|observation|experiment|evidence/i.test(lowerClaim)) \n    components.empiricalVerifiability = Math.min(1, components.empiricalVerifiability + 0.3);\n  \n  if (/because|therefore|since|if.*then|consequently|thus|logic|reason/i.test(lowerClaim)) \n    components.logicalConsistency = Math.min(1, components.logicalConsistency + 0.3);\n  \n  if (!/always|never|everyone|nobody|all|none|impossible|certain/i.test(lowerClaim)) \n    components.falsifiability = Math.min(1, components.falsifiability + 0.3);\n  \n  if (/politics|religion|ethics|philosophy|social issue|subjective|opinion|perspective/i.test(lowerClaim)) \n    components.modelDiversity = Math.min(1, components.modelDiversity + 0.1);\n  \n  if (/in context|depending on|specific situation|currently|historically|for whom|should|ought|better|worse/i.test(lowerClaim)) \n    components.contextualSensitivity = Math.min(1, components.contextualSensitivity + 0.1);\n  \n  if (/i think|i feel|i believe|in my view|it seems|appears to|suggests|according to|source:|based on/i.test(lowerClaim)) \n    components.reflectiveIndex = Math.min(1, components.reflectiveIndex + 0.3);\n\n  // Ensure scores are between 0 and 1\n  for (const key in components) { \n    components[key] = Math.max(0, Math.min(1, parseFloat(components[key].toFixed(2)))); \n  }\n\n  const overallScore = Math.pow(components.empiricalVerifiability * components.logicalConsistency * components.falsifiability, 1/3);\n  return { overallScore: parseFloat(overallScore.toFixed(2)), components: components };\n}\n\n// Create analysis\nconst analysis = {\n  claim: primaryClaim,\n  assumptions: identifyAssumptions(primaryClaim),\n  verifactScore: calculateScores(primaryClaim),\n  perspectives: [] // Will be filled later\n};\n\n// Return analysis\nreturn [{ \n  json: { \n    claimAnalysis: [analysis], \n    claimForPerspectiveGen: primaryClaim, \n    _initialAnalysis: [analysis] \n  } \n}];"
+      },
+      "name": "Extract Claims & Analyze (Basic + Heuristic Metrics)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "fb8ade91-6411-4794-b2a1-9ca1e119fc0c"
+    },
+    {
+      "parameters": {
+        "functionCode": "// ------------- UPDATED Prepare Enhanced Log that works with Format Output -------------\n// Prepare Enhanced Log Data, reading from Format Output node\n\nconst inputData = $input.item.json; // Data from 'Format Output'\nconsole.log(\"Prepare Log Node: Input Received:\", JSON.stringify(inputData));\n\n// Get user input data using $items for robustness\nlet userInputData = {};\ntry {\n    const userInputItems = $items(\"Capture User Input\");\n    if (userInputItems && userInputItems.length > 0) {\n        userInputData = userInputItems[0].json;\n    } else {\n        console.warn(\"Prepare Log Node: Could not retrieve data from Capture User Input node.\");\n    }\n} catch (e) {\n    console.error(\"Prepare Log Node: Error retrieving data from Capture User Input node:\", e);\n}\n\nconst timestamp = new Date().toISOString();\n\nconst userStatement = userInputData?.userStatement || '(unknown)';\n// Read the response from the 'Response' field\nconst llmResponse = inputData?.Response || '(no response)'; \n\n// Parse the analysis data from the 'AnalysisJSON' field\nlet analysis = [];\ntry {\n    if (inputData?.AnalysisJSON) {\n        analysis = JSON.parse(inputData.AnalysisJSON);\n    } else {\n        console.warn(\"Prepare Log Node: AnalysisJSON field missing or empty.\");\n    }\n    // Ensure analysis is an array even after parsing\n    if (!Array.isArray(analysis)) {\n        console.warn(\"Prepare Log Node: Parsed AnalysisJSON is not an array. Resetting.\", analysis);\n        analysis = [];\n    }\n} catch (e) {\n    console.error(\"Prepare Log Node: Error parsing AnalysisJSON:\", e);\n    analysis = []; // Default to empty array on error\n}\n\nconsole.log(\"Prepare Log Node: Parsed Analysis Data:\", JSON.stringify(analysis));\n\nlet avgVerifactScore = 0;\nlet avgMDQ = 0;\nlet avgCSI = 0;\nlet avgReflective = 0;\nlet claimCount = 0;\n\nif (Array.isArray(analysis) && analysis.length > 0) {\n  let verifactSum = 0;\n  let mdqSum = 0;\n  let csiSum = 0;\n  let reflectiveSum = 0;\n  claimCount = analysis.length; // Count the number of claims analyzed\n\n  analysis.forEach(result => {\n    // Add null/undefined checks for safety\n    if(result?.verifactScore?.overallScore != null) { \n        verifactSum += Number(result.verifactScore.overallScore) || 0;\n    }\n    if (result?.verifactScore?.components) {\n        mdqSum += Number(result.verifactScore.components.modelDiversity) || 0;\n        csiSum += Number(result.verifactScore.components.contextualSensitivity) || 0;\n        reflectiveSum += Number(result.verifactScore.components.reflectiveIndex) || 0;\n    }\n  });\n  \n  avgVerifactScore = claimCount > 0 ? verifactSum / claimCount : 0;\n  avgMDQ = claimCount > 0 ? mdqSum / claimCount : 0;\n  avgCSI = claimCount > 0 ? csiSum / claimCount : 0;\n  avgReflective = claimCount > 0 ? reflectiveSum / claimCount : 0;\n}\n\n// Prepare log entry object\nconst logEntry = {\n  Timestamp: timestamp,\n  UserStatement: userStatement,\n  Response: llmResponse,\n  AvgVerifactScore: avgVerifactScore.toFixed(2),\n  AvgModelDiversity: avgMDQ.toFixed(2),\n  AvgContextualSensitivity: avgCSI.toFixed(2),\n  AvgReflectiveIndex: avgReflective.toFixed(2),\n  ClaimCount: claimCount, // Use the calculated claim count\n  // Log the original stringified JSON as received, or re-stringify the parsed object\n  AnalysisJSON: inputData?.AnalysisJSON || JSON.stringify(analysis) \n};\n\nconsole.log(\"Prepare Log Node: Final Log Entry:\", JSON.stringify(logEntry));\n\nreturn [{ json: logEntry }];\n// ------------- END: Updated Prepare Enhanced Log -------------"
+      },
+      "name": "Prepare Enhanced Log",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1160,
+        340
+      ],
+      "id": "c97a15a8-59a8-4120-83ae-ba567c4bbd0d"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $input.item.json }}",
+        "options": {}
+      },
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        180
+      ],
+      "id": "5b6b3346-850b-4c52-a0f9-3bbd84c3874a"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1XUXILqSbAzOOGck0C9d3yzPByOYx6JI0Okpa5e0nGCU",
+          "mode": "list",
+          "cachedResultName": "Belief Explorer Logs",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1XUXILqSbAzOOGck0C9d3yzPByOYx6JI0Okpa5e0nGCU/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1XUXILqSbAzOOGck0C9d3yzPByOYx6JI0Okpa5e0nGCU/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "Timestamp"
+          ],
+          "schema": [
+            {
+              "id": "Timestamp",
+              "displayName": "Timestamp",
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "UserStatement",
+              "displayName": "UserStatement",
+              "type": "string"
+            },
+            {
+              "id": "Response",
+              "displayName": "Response",
+              "type": "string"
+            },
+            {
+              "id": "AvgVerifactScore",
+              "displayName": "AvgVerifactScore",
+              "type": "number"
+            },
+            {
+              "id": "AvgModelDiversity",
+              "displayName": "AvgModelDiversity",
+              "type": "number"
+            },
+            {
+              "id": "AvgContextualSensitivity",
+              "displayName": "AvgContextualSensitivity",
+              "type": "number"
+            },
+            {
+              "id": "AvgReflectiveIndex",
+              "displayName": "AvgReflectiveIndex",
+              "type": "number"
+            },
+            {
+              "id": "ClaimCount",
+              "displayName": "ClaimCount",
+              "type": "number"
+            },
+            {
+              "id": "AnalysisJSON",
+              "displayName": "AnalysisJSON",
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "name": "Log Conversation",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        1360,
+        340
+      ],
+      "id": "13668f56-b36d-407b-9940-6bcec20c1fb7",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "s72RQrd6u8Y39xma",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-pro-preview-03-25",
+        "options": {}
+      },
+      "id": "536c1deb-b2a1-4356-8da4-c686db7d7d16",
+      "name": "Google Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        340,
+        340
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "vzMZ3bRacJnUJ09w",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-pro-preview-03-25",
+        "options": {}
+      },
+      "id": "364bdadd-7469-4d8e-b9e1-7a09123b1bf8",
+      "name": "Google Gemini Chat Model1",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        860,
+        360
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "vzMZ3bRacJnUJ09w",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "You are analyzing this specific claim: \"{{$input.item.json.claimForPerspectiveGen}}\"\n\nGenerate EXACTLY 3 different perspectives on THIS CLAIM ONLY.\n\nYour response must be a JSON array with 3 objects, each containing:\n- \"name\": Brief title of perspective (e.g., \"Scientific\" or \"Ethical\")\n- \"description\": One sentence explaining this viewpoint\n- \"assessment\": One sentence evaluating THE CLAIM from this perspective\n\nDo not add any text outside the JSON array.\nExample format (but about the provided claim, not this example):\n[\n  {\n    \"name\": \"Perspective1\",\n    \"description\": \"Description of this perspective.\",\n    \"assessment\": \"Assessment of the original claim from this perspective.\"\n  },\n  {\n    \"name\": \"Perspective2\",\n    \"description\": \"Description of perspective 2.\",\n    \"assessment\": \"Assessment from perspective 2.\"\n  },\n  {\n    \"name\": \"Perspective3\", \n    \"description\": \"Description of perspective 3.\",\n    \"assessment\": \"Assessment from perspective 3.\"\n  }\n]"
+      },
+      "id": "41babd2e-6408-4838-976f-b21e9a155f8d",
+      "name": "Basic LLM Chain1",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [
+        160,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ------------- START: Process Perspectives Code v2 (Correct Return + Logging) -------------\nconsole.log(\"Process Perspectives Node: Starting.\");\n// Get LLM output (direct input to this Code node)\nconst llmOutput = $input.item.json; \nconsole.log(\"Process Perspectives Node: Input from LLM Chain:\", JSON.stringify(llmOutput));\n\n// Get initial analysis data using $items for robustness\nlet initialAnalysis = [];\nlet origClaim = \"\";\ntry {\n    const extractItems = $items(\"Extract Claims & Analyze (Basic + Heuristic Metrics)\");\n    if (extractItems && extractItems.length > 0) {\n        // Use the _initialAnalysis field created by the Extract node\n        initialAnalysis = extractItems[0].json?._initialAnalysis || []; \n        origClaim = extractItems[0].json?.claimForPerspectiveGen || \"\"; // Get original claim\n        console.log(\"Process Perspectives Node: Fetched initialAnalysis:\", JSON.stringify(initialAnalysis));\n        console.log(\"Process Perspectives Node: Fetched origClaim:\", origClaim);\n    } else {\n        console.warn(\"Process Perspectives Node: Could not fetch data from Extract node.\");\n    }\n} catch (e) {\n    console.error(\"Process Perspectives Node: Error fetching data from Extract node:\", e);\n}\n\n// Ensure initialAnalysis is a usable array\nif (!Array.isArray(initialAnalysis)) { initialAnalysis = []; }\n\n// Parse perspectives from LLM output\nlet perspectives = [];\nlet parsedSuccessfully = false;\ntry {\n    let rawJsonString = '';\n    // Prioritize .text field from Langchain LLM Chain output\n    if (llmOutput?.text) { \n        rawJsonString = llmOutput.text.replace(/```json\\s*|\\s*```/g, '').trim();\n        console.log(\"Process Perspectives Node: Found text property:\", rawJsonString);\n    } \n    // Add fallback for other possible structures if needed - CHECK LLM OUTPUT\n    else if (typeof llmOutput === 'string' && llmOutput.startsWith('[')) { // Maybe it's just the string?\n         rawJsonString = llmOutput.trim();\n         console.log(\"Process Perspectives Node: Input might be JSON string directly.\");\n    } \n    else {\n        console.log(\"Process Perspectives Node: No .text property or direct JSON string found in LLM output.\");\n        // Optionally try searching other properties if the structure is inconsistent\n    }\n\n    if (rawJsonString && rawJsonString.startsWith('[') && rawJsonString.endsWith(']')) {\n        perspectives = JSON.parse(rawJsonString);\n        parsedSuccessfully = true;\n        console.log(\"Process Perspectives Node: Parsed perspectives successfully:\", JSON.stringify(perspectives));\n    } else if (rawJsonString) {\n         console.warn(\"Process Perspectives Node: Extracted string doesn't look like a JSON array:\", rawJsonString);\n    }\n\n} catch (e) {\n    console.error(\"Process Perspectives Node: Error parsing perspectives JSON:\", e.message);\n}\n\n// Validate parsed structure\nif (parsedSuccessfully && (!Array.isArray(perspectives) || perspectives.some(p => typeof p !== 'object' || !p.name || !p.description || !p.assessment))) {\n    console.error(\"Process Perspectives Node: Parsed perspectives data has incorrect structure:\", JSON.stringify(perspectives));\n    perspectives = []; // Reset if invalid structure\n    parsedSuccessfully = false;\n}\n\n// Use Fallback perspectives ONLY if parsing failed AND we have an initial claim\nif ((!parsedSuccessfully || perspectives.length === 0) && initialAnalysis.length > 0) {\n    console.log(\"Process Perspectives Node: Using fallback perspectives.\");\n    const claim = initialAnalysis[0].claim || \"the user's claim\"; // Use fallback text if claim missing\n    // Generic fallback perspectives\n    perspectives = [\n        { \"name\": \"Empirical\", \"description\": \"Based on observable evidence.\", \"assessment\": `The claim \"${claim}\" should be evaluated against empirical data.`},\n        { \"name\": \"Logical\", \"description\": \"Concerned with consistent reasoning.\", \"assessment\": `This claim's logical structure and premises require examination.`},\n        { \"name\": \"Alternative\", \"description\": \"Considers other possibilities.\", \"assessment\": `Alternative explanations or viewpoints regarding \"${claim}\" could also be explored.`}\n    ];\n}\n\n// Add perspectives to the analysis object\nif (initialAnalysis.length > 0 && perspectives.length > 0) {\n    initialAnalysis[0].perspectives = perspectives.map(p => ({ ...p, score: 0.5 })); // Add default score\n    console.log(\"Process Perspectives Node: Added perspectives to initialAnalysis.\");\n} else {\n     console.log(\"Process Perspectives Node: No perspectives added. InitialAnalysis length:\", initialAnalysis.length, \"Perspectives length:\", perspectives.length);\n}\n\n// Prepare output for the Code node - return object directly\nconst output = { \n    enhancedAnalysis: initialAnalysis,\n    // Pass original claim explicitly for next LLM step\n    originalClaim: origClaim \n};\n\nconsole.log(\"Process Perspectives Node: Final Output:\", JSON.stringify(output));\nreturn output; \n// ------------- END: Process Perspectives Code v2 -------------"
+      },
+      "id": "d4e55725-dc44-4828-bea6-8b0b24b3d97e",
+      "name": "Process Perspectives and Merge",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format final output for frontend\nconst llmResponse = $input.item.json;\nconst mergeNode = $items(\"Process Perspectives and Merge\");\n\n// Get the analysis data\nlet analysisData = [];\nif (mergeNode && mergeNode.length > 0 && mergeNode[0].json.enhancedAnalysis) {\n  analysisData = mergeNode[0].json.enhancedAnalysis;\n}\n\n// Get response text\nlet responseText = \"\";\nif (llmResponse) {\n  if (llmResponse.text) {\n  responseText = llmResponse.text;\n  } else if (typeof llmResponse === 'string') {\n    responseText = llmResponse;\n  }\n}\n\n// Clean response\nresponseText = responseText ? responseText.trim().replace(/^(Assistant:|Response:)/i, '').trim() : \"\";\n\n// If no valid response, create a fallback\nif (!responseText) {\n  if (analysisData.length > 0 && analysisData[0].perspectives && analysisData[0].perspectives.length > 0) {\n    const claim = analysisData[0].claim;\n    const perspective = analysisData[0].perspectives[0];\n    \n    responseText = `I find your statement that \"${claim}\" interesting to explore. From a ${perspective.name.toLowerCase()} perspective, ${perspective.assessment.toLowerCase()} What led you to this viewpoint? What evidence or reasoning supports it?`;\n  } else {\n    responseText = \"I'm interested in exploring your perspective further. Could you share more about your reasoning on this topic?\";\n  }\n}\n\n// Format for frontend\nconst outputForFrontend = {\n  Response: responseText,\n  AnalysisJSON: JSON.stringify(analysisData)\n};\n\n// CODE NODE FORMAT\nreturn { json: outputForFrontend };"
+      },
+      "id": "901268f6-fa8a-4288-a9c3-ec2627f3a0c8",
+      "name": "Format Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "6d437c73-8849-4dba-9d88-634c930fc2b3",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "name": "Webhook (Entry Point)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -320,
+        120
+      ],
+      "webhookId": "0fdb0170-0adc-474d-bbc8-5045aab04def",
+      "id": "8fa95063-be1f-48cb-84a0-480ba052e46e"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "You are a Belief Explorer, a helpful and curious AI assistant using the Socratic method. Your goal is to help the user reflect on their beliefs. Do NOT debate, agree, disagree, or give opinions.\n\nThe user stated the belief: \"{{$input.item.json.originalClaim}}\" // <<< CORRECTED VARIABLE ACCESS\n\nAsk one or two open-ended, reflective questions about this specific belief (\"{{$input.item.json.originalClaim}}\") to encourage the user to think about their reasoning or the evidence. End your response ONLY with the question(s)."
+      },
+      "id": "9e54ccc4-0d99-4f69-990e-e3290439d092",
+      "name": "Basic LLM Chain2",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [
+        720,
+        160
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Capture User Input": {
+      "main": [
+        [
+          {
+            "node": "Extract Claims & Analyze (Basic + Heuristic Metrics)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Enhanced Log": {
+      "main": [
+        [
+          {
+            "node": "Log Conversation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Claims & Analyze (Basic + Heuristic Metrics)": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain2",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain1": {
+      "main": [
+        [
+          {
+            "node": "Process Perspectives and Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Perspectives and Merge": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Output": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Enhanced Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook (Entry Point)": {
+      "main": [
+        [
+          {
+            "node": "Capture User Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain2": {
+      "main": [
+        [
+          {
+            "node": "Format Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "2659d095-3156-4234-983b-3baefb6422f6",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "dcd492f2bf31c967f6deb6e4dd57ba7a925d88362d1efc9ea946e3768040bbcb"
+  },
+  "id": "hqbvQgfOz8dWvsL5",
+  "tags": []
+}

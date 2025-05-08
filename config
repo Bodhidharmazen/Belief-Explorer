@@ -1,0 +1,8 @@
+Host tensordock
+    HostName 147.185.40.61
+    User user
+    Port 20006
+    IdentityFile /home/ubuntu/id_ed25519
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+    LogLevel DEBUG3
