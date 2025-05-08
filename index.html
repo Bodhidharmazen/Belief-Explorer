@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Belief Explorer</title>
+    <style>
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8f9fa;
+            --bg-tertiary: #e9ecef;
+            --text-primary: #212529;
+            --text-secondary: #495057;
+            --text-tertiary: #6c757d;
+            --accent-primary: #4361ee;
+            --accent-secondary: #3a0ca3;
+            --accent-tertiary: #7209b7;
+            --success: #4cc9f0;
+            --warning: #f72585;
+            --border-color: #dee2e6;
+            --card-bg: #ffffff;
+            --message-user: #e9ecef;
+            --message-assistant: #f1f3f5;
+            --shadow: rgba(0, 0, 0, 0.1);
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-primary: #121212;
+                --bg-secondary: #1e1e1e;
+                --bg-tertiary: #2c2c2c;
+                --text-primary: #f8f9fa;
+                --text-secondary: #e9ecef;
+                --text-tertiary: #adb5bd;
+                --accent-primary: #4cc9f0;
+                --accent-secondary: #4361ee;
+                --accent-tertiary: #7209b7;
+                --success: #4cc9f0;
+                --warning: #f72585;
+                --border-color: #343a40;
+                --card-bg: #2c2c2c;
+                --message-user: #3a3a3a;
+                --message-assistant: #252525;
+                --shadow: rgba(0, 0, 0, 0.3);
+            }
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: var(--text-primary);
+            background-color: var(--bg-primary);
+            margin: 0;
+            padding: 0;
+            transition: all 0.3s ease;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        h1, h2, h3, h4, h5, h6 {
+            color: var(--text-primary);
+            margin-top: 0;
+        }
+
+        main {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 2rem;
+        }
+
+        @media (min-width: 768px) {
+            main {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        .chat-container {
+            background-color: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px var(--shadow);
+        }
+
+        .messages {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            max-height: 400px;
+            overflow-y: auto;
+            padding: 1rem;
+            border-radius: 6px;
+            background-color: var(--bg-primary);
+            margin-bottom: 1rem;
+        }
+
+        .message {
+            padding: 1rem;
+            border-radius: 6px;
+            max-width: 85%;
+        }
+
+        .message.user {
+            background-color: var(--message-user);
+            align-self: flex-end;
+            border-bottom-right-radius: 0;
+        }
+
+        .message.assistant {
+            background-color: var(--message-assistant);
+            align-self: flex-start;
+            border-bottom-left-radius: 0;
+        }
+
+        .input-area {
+            display: flex;
+            gap: 1rem;
+        }
+
+        textarea {
+            flex: 1;
+            padding: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            resize: vertical;
+            min-height: 80px;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+        }
+
+        button {
+            padding: 0.5rem 1.5rem;
+            background-color: var(--accent-primary);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            font-weight: 600;
+        }
+
+        button:hover {
+            background-color: var(--accent-secondary);
+        }
+
+        .analysis {
+            background-color: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px var(--shadow);
+        }
+
+        .tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .tab {
+            padding: 0.5rem 1rem;
+            background-color: var(--bg-tertiary);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        .tab.active {
+            background-color: var(--accent-primary);
+            color: white;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .analysis-section {
+            background-color: var(--card-bg);
+            padding: 1.5rem;
+            border-radius: 6px;
+            margin-bottom: 1.5rem;
+        }
+
+        .score {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 60px;
+            height: 60px;
+            background-color: var(--accent-primary);
+            color: white;
+            border-radius: 50%;
+            font-weight: bold;
+            font-size: 1.2rem;
+            margin-right: 1rem;
+            float: left;
+        }
+
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 4px solid white;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 2rem auto;
+            display: none;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .metric {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .metric-label {
+            min-width: 200px;
+            font-weight: 600;
+        }
+
+        .metric-bar {
+            flex-grow: 1;
+            background-color: var(--bg-tertiary);
+            height: 10px;
+            border-radius: 5px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .metric-value {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            background-color: var(--accent-primary);
+            transition: width 0.5s ease;
+        }
+
+        .key-points {
+            background-color: var(--bg-primary);
+            padding: 1rem;
+            border-radius: 6px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem 0;
+            color: var(--text-tertiary);
+        }
+
+        .about-section {
+            background-color: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-top: 3rem;
+            box-shadow: 0 4px 6px var(--shadow);
+        }
+
+        /* Dark/Light mode toggle */
+        .theme-toggle {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Belief Explorer</h1>
+            <p>A multi-perspective critical thinking analysis system</p>
+        </header>
+
+        <main>
+            <div class="chat-container">
+                <h2>What belief or idea would you like to explore together?</h2>
+                <div class="messages" id="messageContainer"></div>
+                <div class="input-area">
+                    <textarea id="userInput" placeholder="Enter a statement or question..."></textarea>
+                    <button id="sendButton">Analyze</button>
+                </div>
+                <div class="spinner" id="chatSpinner"></div>
+            </div>
+
+            <div class="analysis">
+                <div class="tabs">
+                    <div class="tab active" data-tab="critical-thinking">Critical Thinking</div>
+                    <div class="tab" data-tab="perspectives">Perspectives</div>
+                    <div class="tab" data-tab="metrics">Advanced Metrics</div>
+                </div>
+
+                <div class="tab-content active" id="critical-thinking">
+                    <div class="analysis-section">
+                        <h3>Empirical Analysis</h3>
+                        <div class="score" id="empiricalScore">--</div>
+                        <div id="empiricalContent">No analysis yet. Enter a statement to begin.</div>
+                        <div class="key-points" id="empiricalPoints"></div>
+                    </div>
+
+                    <div class="analysis-section">
+                        <h3>Logical Analysis</h3>
+                        <div class="score" id="logicalScore">--</div>
+                        <div id="logicalContent">No analysis yet. Enter a statement to begin.</div>
+                        <div class="key-points" id="logicalPoints"></div>
+                    </div>
+
+                    <div class="analysis-section">
+                        <h3>Pragmatic Analysis</h3>
+                        <div class="score" id="pragmaticScore">--</div>
+                        <div id="pragmaticContent">No analysis yet. Enter a statement to begin.</div>
+                        <div class="key-points" id="pragmaticPoints"></div>
+                    </div>
+                </div>
+
+                <div class="tab-content" id="perspectives">
+                    <div id="perspectivesContainer">
+                        <p>No perspectives generated yet. Enter a statement to begin.</p>
+                    </div>
+                </div>
+
+                <div class="tab-content" id="metrics">
+                    <div class="analysis-section">
+                        <h3>Analysis Metrics</h3>
+                        <p id="domainInfo">Domain: Not determined</p>
+                        
+                        <div class="metric">
+                            <div class="metric-label">Verifact Score:</div>
+                            <div class="metric-bar">
+                                <div class="metric-value" id="verifactBar" style="width: 0%;"></div>
+                            </div>
+                            <div class="metric-number" id="verifactScore">--</div>
+                        </div>
+                        
+                        <div class="metric">
+                            <div class="metric-label">Model Diversity Quotient:</div>
+                            <div class="metric-bar">
+                                <div class="metric-value" id="mdqBar" style="width: 0%;"></div>
+                            </div>
+                            <div class="metric-number" id="mdqScore">--</div>
+                        </div>
+                        
+                        <div class="metric">
+                            <div class="metric-label">Contextual Sensitivity Index:</div>
+                            <div class="metric-bar">
+                                <div class="metric-value" id="csiBar" style="width: 0%;"></div>
+                            </div>
+                            <div class="metric-number" id="csiScore">--</div>
+                        </div>
+                    </div>
+
+                    <div class="analysis-section">
+                        <h3>Key Insights</h3>
+                        <div id="keyInsights">
+                            <p>No insights generated yet. Enter a statement to begin.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="spinner" id="analysisSpinner"></div>
+            </div>
+        </main>
+
+        <section class="about-section">
+            <h2>Why We're Here</h2>
+            <p>Sometimes, we hold beliefs without fully realizing the assumptions behind them. When we question those assumptions, a guide can help us arrive at conclusions that resonate more deeply with our inner core. This platform was designed to do just that. It doesn't judge or force; it simply listens and gently reveals the underlying premises that would need to be true for a given claim. In exploring those premises, you decide if they align with your sense of truth.</p>
+            
+            <p>Ask a question or state a belief—like "Is the Earth hollow?"—and we'll help you examine the chain of assumptions. The goal is to provoke your own internal reasoning. Think of it as a friend helping you see your path more clearly, not an authority telling you what to do.</p>
+            
+            <h2>About Belief Explorer</h2>
+            <p>Human history is a story of beliefs – and the biases that cling to them. From political ideologies to personal convictions, we all see the world through subjective lenses shaped by upbringing, culture, and emotion. These biases influence what we accept as true, often overpowering facts and logical arguments. In the modern era, debates on social media or television often entrench opposing sides rather than resolve differences. As polarization grows, a provocative question arises: can artificial intelligence succeed where humans struggle?</p>
+            
+            <p>Our platform is designed to build the first unbiased repository of human beliefs—one that validates ideas based on factual alignment and observation rather than emotional bias. By helping individuals reflect on and critically examine their beliefs, we empower users to defend their ideas through evidence and reason.</p>
+            
+            <p>Contact: info@metacognitioninstitute.com</p>
+            
+            <h2>Our Critical Thinking Framework</h2>
+            <p>Belief Explorer utilizes a comprehensive critical thinking formalization to help analyze beliefs and claims. This multi-dimensional framework includes:</p>
+            
+            <ul>
+                <li><strong>Verifact Score:</strong> A measure of how empirically verifiable and logically consistent a claim is.</li>
+                <li><strong>Model Diversity Quotient (MDQ):</strong> Evaluates how different reasoning approaches view the claim.</li>
+                <li><strong>Contextual Sensitivity Index (CSI):</strong> Measures how appropriate a claim is within its relevant context.</li>
+                <li><strong>Reflective Index:</strong> Assesses awareness of assumptions and bias recognition.</li>
+            </ul>
+            
+            <p>Rather than judging beliefs as simply "right" or "wrong," our system helps users understand the foundations of their thinking and strengthen their reasoning processes across multiple dimensions.</p>
+        </section>
+
+        <footer>
+            <p>© 2025 Belief Explorer | Metacognition Institute</p>
+        </footer>
+    </div>
+
+    <script>
+        // Store conversation history
+        let conversationHistory = [];
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            const sendButton = document.getElementById('sendButton');
+            const userInput = document.getElementById('userInput');
+            const messageContainer = document.getElementById('messageContainer');
+            const chatSpinner = document.getElementById('chatSpinner');
+            const analysisSpinner = document.getElementById('analysisSpinner');
+            
+            // Tab switching
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                    
+                    tab.classList.add('active');
+                    document.getElementById(tab.dataset.tab).classList.add('active');
+                });
+            });
+            
+            // Send message when Enter key is pressed (Shift+Enter for new line)
+            userInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+            
+            // Send button click handler
+            sendButton.addEventListener('click', sendMessage);
+            
+            function sendMessage() {
+                const statement = userInput.value.trim();
+                if (!statement) return;
+                
+                // Add user message to UI
+                addMessageToUI('user', statement);
+                
+                // Clear input
+                userInput.value = '';
+                
+                // Show spinner
+                chatSpinner.style.display = 'block';
+                analysisSpinner.style.display = 'block';
+                
+                // Send to server for analysis
+                fetch('/analyze', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        statement: statement,
+                        history: conversationHistory
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    // Add assistant's response to UI
+                    addMessageToUI('assistant', data.socratic_response);
+                    
+                    // Update conversation history
+                    conversationHistory.push({ role: 'user', content: statement });
+                    conversationHistory.push({ role: 'assistant', content: data.socratic_response });
+                    
+                    // Update analysis UI
+                    updateAnalysisUI(data);
+                    
+                    // Hide spinners
+                    chatSpinner.style.display = 'none';
+                    analysisSpinner.style.display = 'none';
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    addMessageToUI('assistant', 'Sorry, there was an error processing your request.');
+                    chatSpinner.style.display = 'none';
+                    analysisSpinner.style.display = 'none';
+                });
+            }
+            
+            function addMessageToUI(role, content) {
+                const messageElement = document.createElement('div');
+                messageElement.classList.add('message', role);
+                messageElement.textContent = content;
+                messageContainer.appendChild(messageElement);
+                
+                // Scroll to bottom
+                messageContainer.scrollTop = messageContainer.scrollHeight;
+            }
+            
+            function updateAnalysisUI(data) {
+                // Update empirical section
+                document.getElementById('empiricalScore').textContent = Math.round(data.arbiters.empirical.score * 100);
+                document.getElementById('empiricalContent').textContent = data.arbiters.empirical.assessment;
+                document.getElementById('empiricalPoints').innerHTML = '<ul>' + 
+                    data.arbiters.empirical.key_evidence.map(point => `<li>${point}</li>`).join('') + 
+                    '</ul>';
+                
+                // Update logical section
+                document.getElementById('logicalScore').textContent = Math.round(data.arbiters.logical.score * 100);
+                document.getElementById('logicalContent').textContent = data.arbiters.logical.assessment;
+                document.getElementById('logicalPoints').innerHTML = '<ul>' + 
+                    data.arbiters.logical.key_premises.map(point => `<li>${point}</li>`).join('') + 
+                    '</ul>';
+                
+                // Update pragmatic section
+                document.getElementById('pragmaticScore').textContent = Math.round(data.arbiters.pragmatic.score * 100);
+                document.getElementById('pragmaticContent').textContent = data.arbiters.pragmatic.assessment;
+                document.getElementById('pragmaticPoints').innerHTML = '<ul>' + 
+                    data.arbiters.pragmatic.key_implications.map(point => `<li>${point}</li>`).join('') + 
+                    '</ul>';
+                
+                // Update perspectives tab
+                const perspectivesContainer = document.getElementById('perspectivesContainer');
+                perspectivesContainer.innerHTML = '';
+                data.perspectives.forEach(perspective => {
+                    const perspectiveSection = document.createElement('div');
+                    perspectiveSection.classList.add('analysis-section');
+                    perspectiveSection.innerHTML = `
+                        <h3>${perspective.title}</h3>
+                        <p>${perspective.content}</p>
+                    `;
+                    perspectivesContainer.appendChild(perspectiveSection);
+                });
+                
+                // Update metrics tab
+                document.getElementById('domainInfo').textContent = `Domain: ${data.domain.charAt(0).toUpperCase() + data.domain.slice(1)}`;
+                
+                document.getElementById('verifactBar').style.width = `${data.verifact_score * 100}%`;
+                document.getElementById('verifactScore').textContent = Math.round(data.verifact_score * 100);
+                
+                document.getElementById('mdqBar').style.width = `${data.model_diversity_quotient * 100}%`;
+                document.getElementById('mdqScore').textContent = Math.round(data.model_diversity_quotient * 100);
+                
+                document.getElementById('csiBar').style.width = `${data.contextual_sensitivity_index * 100}%`;
+                document.getElementById('csiScore').textContent = Math.round(data.contextual_sensitivity_index * 100);
+                
+                // Update key insights
+                const keyInsightsContainer = document.getElementById('keyInsights');
+                keyInsightsContainer.innerHTML = '<ul>' + 
+                    data.key_insights.map(insight => `<li>${insight}</li>`).join('') + 
+                    '</ul>';
+            }
+        });
+    </script>
+</body>
+</html>
+"""
+
+class EmpiricalArbiter:
+    """Evaluates claims based on evidence, measurement, and observation."""
+    
+    def analyze(self, statement, history=None):
+        try:
+            logger.info(f"Starting empirical analysis for: {statement}")
+            
+            # Configure the model
+            generation_config = {
+                "temperature": 0.2,
+                "max_output_tokens": 1024,
+            }
+            
+            model = genai.GenerativeModel(
+                model_name="gemini-1.5-pro",
+                generation_config=generation_config
+            )
+            
+            # Construct the prompt with clear instructions
+            prompt = f"""
+            You are the Empirical Arbiter, a specialized reasoning system focused on empirical evidence.
+            
+            Analyze the following statement from an empirical perspective, focusing exclusively on:
+            - Available evidence
+            - Measurability
+            - Observability
+            - Testability
+            - Scientific consensus (where applicable)
+            
+            Statement: "{statement}"
+            
+            Your response must be in valid JSON format with the following structure:
+            {{
+                "empirical_score": <float between 0.0 and 1.0>,
+                "key_evidence_points": [<list of up to 3 key evidence points>],
+                "observability_assessment": <string assessment of observability>,
+                "measurability_assessment": <string assessment of measurability>,
+                "testability_assessment": <string assessment of testability>,
+                "scientific_consensus": <string assessment of scientific consensus>,
+                "empirical_reasoning": <string explaining your overall assessment>
+            }}
+            
+            Remember:
+            - Focus solely on empirical aspects - evidence, observation, and measurement
+            - Avoid logical or pragmatic considerations
+            - Be precise and evidence-based in your reasoning
+            - The empirical_score reflects how well the claim is supported by empirical evidence (1.0 = strong empirical support)
+            - Provide your response as valid JSON only - no other text before or after
+            """
+            
+            # Generate response
+            response = model.generate_content(prompt)
+            result_text = response.text
+            
+            # Attempt to parse as JSON
+            try:
+                # Clean the text - find JSON content if wrapped in backticks
+                if "```json" in result_text:
+                    result_text = result_text.split("```json")[1].split("```")[0].strip()
+                elif "```" in result_text:
+                    result_text = result_text.split("```")[1].split("```")[0].strip()
+                
+                # Parse the JSON
+                results = json.loads(result_text)
+                logger.info("Empirical analysis completed successfully")
+                return results
+            except json.JSONDecodeError:
+                logger.error(f"Failed to parse response as JSON: {result_text}")
+                # Create a fallback response
+                return {
+                    "empirical_score": 0.5,
+                    "key_evidence_points": ["Unable to parse evidence points"],
+                    "observability_assessment": "Analysis unavailable",
+                    "measurability_assessment": "Analysis unavailable",
+                    "testability_assessment": "Analysis unavailable",
+                    "scientific_consensus": "Analysis unavailable",
+                    "empirical_reasoning": "Failed to parse empirical analysis"
+                }
+                
+        except Exception as e:
+            logger.error(f"Error in empirical analysis: {str(e)}")
+            return {
+                "empirical_score": 0.0,
+                "key_evidence_points": [f"Error occurred: {str(e)}"],
+                "observability_assessment": "Error",
+                "measurability_assessment": "Error",
+                "testability_assessment": "Error",
+                "scientific_consensus": "Error",
+                "empirical_reasoning": f"An error occurred: {str(e)}"
+            }
+
+
+class LogicalArbiter:
+    """Assesses logical structure, consistency, fallacies, and argument patterns."""
+    
+    def analyze(self, statement, history=None):
+        try:
+            logger.info(f"Starting logical analysis for: {statement}")
+            
+            # Configure the model
+            generation_config = {
+                "temperature": 0.2,
+                "max_output_tokens": 1024,
+            }
+            
+            model = genai.GenerativeModel(
+                model_name="gemini-1.5-pro",
+                generation_config=generation_config
+            )
+            
+            # Construct the prompt with clear instructions
+            prompt = f"""
+            You are the Logical Arbiter, a specialized reasoning system focused on logical validity.
+            
+            Analyze the following statement from a logical perspective, focusing exclusively on:
+            - Premise-conclusion structure
+            - Logical consistency
+            - Deductive validity
+            - Inductive strength
+            - Presence of fallacies
+            - Hidden assumptions
+            
+            Statement: "{statement}"
+            
+            Your response must be in valid JSON format with the following structure:
+            {{
+                "logical_score": <float between 0.0 and 1.0>,
+                "logical_structure": <string describing structure>,
+                "key_premises": [<list of up to 3 key premises>],
+                "hidden_assumptions": [<list of up to 3 hidden assumptions>],
+                "fallacies_identified": [<list of fallacies if any>],
+                "logical_consistency": <string assessment>,
+                "logical_reasoning": <string explaining your overall assessment>
+            }}
+            
+            Remember:
+            - Focus solely on logical aspects - structure, consistency, validity
+            - Avoid empirical or pragmatic considerations
+            - Be precise in identifying logical strengths and weaknesses
+            - The logical_score reflects logical soundness (1.0 = logically sound)
+            - Provide your response as valid JSON only - no other text before or after
+            """
+            
+            # Generate response
+            response = model.generate_content(prompt)
+            result_text = response.text
+            
+            # Attempt to parse as JSON
+            try:
+                # Clean the text - find JSON content if wrapped in backticks
+                if "```json" in result_text:
+                    result_text = result_text.split("```json")[1].split("```")[0].strip()
+                elif "```" in result_text:
+                    result_text = result_text.split("```")[1].split("```")[0].strip()
+                
+                # Parse the JSON
+                results = json.loads(result_text)
+                logger.info("Logical analysis completed successfully")
+                return results
+            except json.JSONDecodeError:
+                logger.error(f"Failed to parse response as JSON: {result_text}")
+                # Create a fallback response
+                return {
+                    "logical_score": 0.5,
+                    "logical_structure": "Unable to parse structure",
+                    "key_premises": ["Unable to parse premises"],
+                    "hidden_assumptions": ["Unable to parse assumptions"],
+                    "fallacies_identified": ["Unable to parse fallacies"],
+                    "logical_consistency": "Analysis unavailable",
+                    "logical_reasoning": "Failed to parse logical analysis"
+                }
+                
+        except Exception as e:
+            logger.error(f"Error in logical analysis: {str(e)}")
+            return {
+                "logical_score": 0.0,
+                "logical_structure": "Error",
+                "key_premises": [f"Error occurred: {str(e)}"],
+                "hidden_assumptions": ["Error"],
+                "fallacies_identified": ["Error"],
+                "logical_consistency": "Error",
+                "logical_reasoning": f"An error occurred: {str(e)}"
+            }
+
+
+class PragmaticArbiter:
+    """Examines practical utility, real-world implications, and functional value."""
+    
+    def analyze(self, statement, history=None):
+        try:
+            logger.info(f"Starting pragmatic analysis for: {statement}")
+            
+            # Configure the model
+            generation_config = {
+                "temperature": 0.2,
+                "max_output_tokens": 1024,
+            }
+            
+            model = genai.GenerativeModel(
+                model_name="gemini-1.5-pro",
+                generation_config=generation_config
+            )
